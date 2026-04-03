@@ -1,765 +1,538 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Users, Award, Search, Plus, Download, Filter, ChevronRight, Check, X, Edit2, Trash2, Eye, QrCode, FileText, TrendingUp, Upload, Shield, UserPlus, Lock, LogOut, AlertCircle, CheckCircle, Clock, XCircle, Menu, Home, Clipboard, UserCheck, Bell, Settings, FileCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Award, Search, Plus, Download, X, Trash2, Eye, QrCode, Shield, UserPlus, LogOut, CheckCircle, Clock, XCircle, Home, Clipboard, UserCheck, Bell, FileCheck, BarChart2, Activity, Users } from 'lucide-react';
 
+// ─── QR Code generator (canvas-based, no external lib) ───────────────────────
+const QRCodeCanvas = ({ value, size = 128 }) => {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const modules = 25;
+    const cellSize = size / modules;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#000000';
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) { hash = ((hash << 5) - hash) + value.charCodeAt(i); hash |= 0; }
+    const rand = (seed) => { let x = Math.sin(seed + hash) * 10000; return x - Math.floor(x); };
+    for (let row = 0; row < modules; row++) {
+      for (let col = 0; col < modules; col++) {
+        const inTL = row < 7 && col < 7;
+        const inTR = row < 7 && col >= modules - 7;
+        const inBL = row >= modules - 7 && col < 7;
+        if (inTL || inTR || inBL) {
+          let r = row, c = col;
+          if (inTR) c = col - (modules - 7);
+          if (inBL) r = row - (modules - 7);
+          const isOuter = r === 0 || r === 6 || c === 0 || c === 6;
+          const isInner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+          if (isOuter || isInner) ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        } else if (rand(row * modules + col) > 0.5) {
+          ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+  }, [value, size]);
+  return <canvas ref={canvasRef} width={size} height={size} style={{ imageRendering: 'pixelated' }} />;
+};
+
+// ─── PDF Generator ────────────────────────────────────────────────────────────
+const generateLicensePDF = (license) => {
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Licence ${license.licenseNumber}</title>
+  <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;background:#eee;display:flex;justify-content:center;align-items:center;min-height:100vh;}
+  .card{width:340px;background:white;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+  .stripe{height:6px;background:linear-gradient(to right,#15803d 33%,#eab308 33%,#eab308 66%,#dc2626 66%);}
+  .hdr{background:#15803d;padding:12px 14px;display:flex;align-items:center;gap:10px;}
+  .logo{width:46px;height:46px;background:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;color:#15803d;font-size:14px;flex-shrink:0;}
+  .hdr-txt{color:white;font-size:11px;font-weight:900;line-height:1.3;}
+  .title{background:#166534;text-align:center;padding:8px;color:white;font-size:18px;font-weight:900;letter-spacing:3px;}
+  .body{padding:14px;background:#f9fafb;}
+  .player{display:flex;gap:10px;margin-bottom:12px;}
+  .photo{width:88px;height:108px;background:linear-gradient(135deg,#15803d,#166534);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:26px;font-weight:900;flex-shrink:0;border:3px solid #15803d;overflow:hidden;}
+  .photo img{width:100%;height:100%;object-fit:cover;}
+  .infobx{flex:1;background:#15803d;border-radius:8px;padding:10px;}
+  .pname{color:white;font-size:15px;font-weight:900;border-bottom:1px solid rgba(255,255,255,.3);padding-bottom:6px;margin-bottom:6px;}
+  .irow{margin-bottom:4px;}
+  .ilbl{color:rgba(255,255,255,.7);font-size:9px;}
+  .ival{color:white;font-size:11px;font-weight:700;}
+  .bot{display:flex;gap:10px;padding:12px;border-top:2px solid #e5e7eb;}
+  .qrsec{display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .qrbx{width:86px;height:86px;border:2px solid #15803d;border-radius:8px;padding:3px;background:white;}
+  .qrid{font-size:9px;font-weight:700;color:#15803d;}
+  .stsbx{flex:1;display:flex;flex-direction:column;gap:6px;justify-content:center;}
+  .srow{background:#f3f4f6;border-radius:6px;padding:7px 10px;display:flex;justify-content:space-between;}
+  .slbl{font-size:10px;color:#6b7280;}
+  .sval{font-size:12px;font-weight:900;color:#15803d;}
+  .badges{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 12px 12px;}
+  .badge{display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .bico{font-size:20px;}
+  .blbl{font-size:8px;font-weight:700;color:#15803d;text-align:center;}
+  @media print{body{background:white;}.card{box-shadow:none;}}
+  </style></head><body>
+  <div class="card">
+  <div class="stripe"></div>
+  <div class="hdr"><div class="logo">FSH</div><div class="hdr-txt">FÉDÉRATION SÉNÉGALAISE<br>DE HANDBALL</div></div>
+  <div class="title">LICENCE JOUEUR</div>
+  <div class="body">
+  <div class="player">
+  <div class="photo">${license.photoDataUrl ? `<img src="${license.photoDataUrl}"/>` : license.firstName[0]+license.lastName[0]}</div>
+  <div class="infobx">
+  <div class="pname">${license.firstName} ${license.lastName}</div>
+  <div class="irow"><div class="ilbl">N° Licence</div><div class="ival">${license.licenseNumber}</div></div>
+  <div class="irow"><div class="ilbl">Date de Naissance</div><div class="ival">${new Date(license.dateOfBirth).toLocaleDateString('fr-FR')}</div></div>
+  <div class="irow"><div class="ilbl">Club</div><div class="ival">${license.club}</div></div>
+  <div class="irow"><div class="ilbl">Catégorie</div><div class="ival">${license.category}</div></div>
+  </div></div></div>
+  <div class="bot">
+  <div class="qrsec"><div class="qrbx"><canvas id="qrc" width="80" height="80"></canvas></div><div class="qrid">ID: ${license.licenseNumber}</div></div>
+  <div class="stsbx">
+  <div class="srow"><span class="slbl">Validité</span><span class="sval">${license.validityYear}</span></div>
+  <div class="srow"><span class="slbl">Statut</span><span class="sval" style="color:${license.status==='active'?'#15803d':'#dc2626'}">${license.status==='active'?'ACTIF':'EXPIRÉ'}</span></div>
+  </div></div>
+  <div class="badges">
+  <div class="badge"><div class="bico">✅</div><div class="blbl">Assuré</div></div>
+  <div class="badge"><div class="bico">🏥</div><div class="blbl">Certifié Médical</div></div>
+  <div class="badge"><div class="bico">🏆</div><div class="blbl">Compétitions</div></div>
+  <div class="badge"><div class="bico">🪪</div><div class="blbl">Identité Vérifiée</div></div>
+  </div>
+  <div class="stripe"></div>
+  </div>
+  <script>
+  const cv=document.getElementById('qrc'),ctx=cv.getContext('2d'),val="${`FSH-${license.licenseNumber}`}",m=20,cell=4;
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,80,80);ctx.fillStyle='#000';
+  let h=0;for(let i=0;i<val.length;i++){h=((h<<5)-h)+val.charCodeAt(i);h|=0;}
+  const rnd=s=>{let x=Math.sin(s+h)*10000;return x-Math.floor(x);};
+  for(let r=0;r<m;r++)for(let c=0;c<m;c++){
+    if(r<7&&c<7){const isO=r===0||r===6||c===0||c===6,isI=r>=2&&r<=4&&c>=2&&c<=4;if(isO||isI)ctx.fillRect(c*cell,r*cell,cell,cell);}
+    else if(r<7&&c>=m-7){const dc=c-(m-7),isO=r===0||r===6||dc===0||dc===6,isI=r>=2&&r<=4&&dc>=2&&dc<=4;if(isO||isI)ctx.fillRect(c*cell,r*cell,cell,cell);}
+    else if(r>=m-7&&c<7){const dr=r-(m-7),isO=dr===0||dr===6||c===0||c===6,isI=dr>=2&&dr<=4&&c>=2&&c<=4;if(isO||isI)ctx.fillRect(c*cell,r*cell,cell,cell);}
+    else if(rnd(r*m+c)>0.45)ctx.fillRect(c*cell,r*cell,cell,cell);}
+  window.onload=()=>window.print();
+  </script></body></html>`);
+  w.document.close();
+};
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
 const HandballLicenseSystem = () => {
-  // Auth & User State
   const [currentUser, setCurrentUser] = useState(null);
   const [showLogin, setShowLogin] = useState(true);
   const [loginForm, setLoginForm] = useState({ username: '', password: '', role: 'admin' });
 
-  // Data State
   const [licenses, setLicenses] = useState([]);
   const [clubs, setClubs] = useState([]);
   const [facilitators, setFacilitators] = useState([]);
   const [clubSecretaries, setClubSecretaries] = useState([]);
   const [licenseRequests, setLicenseRequests] = useState([]);
-
-  // UI State
-  const [view, setView] = useState('dashboard');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedLicense, setSelectedLicense] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('');
-  const [selectedRequest, setSelectedRequest] = useState(null);
   const [notifications, setNotifications] = useState([]);
 
-  // Form States
-  const [facilitatorForm, setFacilitatorForm] = useState({
-    name: '', username: '', password: '', email: '', phone: ''
-  });
-  const [secretaryForm, setSecretaryForm] = useState({
-    name: '', username: '', password: '', email: '', phone: '', club: ''
-  });
-  const [licenseRequestForm, setLicenseRequestForm] = useState({
-    firstName: '', lastName: '', dateOfBirth: '', gender: '', category: '', 
-    photoFile: null, idCardFile: null, medicalCertFile: null, birthCertFile: null
+  const [view, setView] = useState('dashboard');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLicense, setSelectedLicense] = useState(null);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState('');
+  const [showNotif, setShowNotif] = useState(false);
+
+  const [facilitatorForm, setFacilitatorForm] = useState({ name: '', username: '', password: '', email: '', phone: '' });
+  const [secretaryForm, setSecretaryForm] = useState({ name: '', username: '', password: '', email: '', phone: '', club: '' });
+  const [licForm, setLicForm] = useState({
+    firstName: '', lastName: '', dateOfBirth: '', gender: '', category: '',
+    photoFile: null, photoDataUrl: null, idCardFile: null, medicalCertFile: null, medicalCertDataUrl: null, birthCertFile: null
   });
 
-  // Initialize data
   useEffect(() => {
-    loadData();
+    try {
+      const ls = localStorage.getItem('fsh-licenses');
+      const cs = localStorage.getItem('fsh-clubs');
+      const fs = localStorage.getItem('fsh-facilitators');
+      const ss = localStorage.getItem('fsh-secretaries');
+      const rs = localStorage.getItem('fsh-requests');
+      const ns = localStorage.getItem('fsh-notifications');
+      if (ls) setLicenses(JSON.parse(ls));
+      if (ns) setNotifications(JSON.parse(ns));
+      if (cs) { setClubs(JSON.parse(cs)); } else {
+        const def = [
+          { id:'1', name:'ASC Jaraaf', city:'Dakar', facilitatorId:null },
+          { id:'2', name:'AS Douanes', city:'Dakar', facilitatorId:null },
+          { id:'3', name:'ASFA Dakar', city:'Dakar', facilitatorId:null },
+          { id:'4', name:'ASK Handball', city:'Kaolack', facilitatorId:null },
+          { id:'5', name:"US Gorée", city:'Dakar', facilitatorId:null },
+          { id:'6', name:"Jeanne d'Arc", city:'Dakar', facilitatorId:null },
+        ];
+        setClubs(def); localStorage.setItem('fsh-clubs', JSON.stringify(def));
+      }
+      if (fs) { setFacilitators(JSON.parse(fs)); } else {
+        const def = [{ id:'1', name:'Moussa Diallo', username:'facilitator', password:'fac123', email:'moussa@fsh.sn', phone:'77 123 45 67', assignedClubs:[] }];
+        setFacilitators(def); localStorage.setItem('fsh-facilitators', JSON.stringify(def));
+      }
+      if (ss) { setClubSecretaries(JSON.parse(ss)); } else {
+        const def = [{ id:'1', name:'Fatou Sall', username:'secretary', password:'sec123', email:'fatou@jaraaf.sn', phone:'77 987 65 43', club:'ASC Jaraaf', facilitatorId:null }];
+        setClubSecretaries(def); localStorage.setItem('fsh-secretaries', JSON.stringify(def));
+      }
+      if (rs) setLicenseRequests(JSON.parse(rs));
+    } catch(e) { console.log('init default data'); }
   }, []);
 
-  const loadData = () => {
-    try {
-      // Load all data from localStorage
-      const licensesData = localStorage.getItem('fsh-licenses');
-      const clubsData = localStorage.getItem('fsh-clubs');
-      const facilitatorsData = localStorage.getItem('fsh-facilitators');
-      const secretariesData = localStorage.getItem('fsh-secretaries');
-      const requestsData = localStorage.getItem('fsh-requests');
-      const notificationsData = localStorage.getItem('fsh-notifications');
+  const save = (key, val, setter) => { setter(val); localStorage.setItem(key, JSON.stringify(val)); };
 
-      if (licensesData) setLicenses(JSON.parse(licensesData));
-      if (notificationsData) setNotifications(JSON.parse(notificationsData));
-      
-      if (clubsData) {
-        setClubs(JSON.parse(clubsData));
-      } else {
-        const defaultClubs = [
-          { id: '1', name: 'ASC Jaraaf', city: 'Dakar', facilitatorId: null },
-          { id: '2', name: 'AS Douanes', city: 'Dakar', facilitatorId: null },
-          { id: '3', name: 'ASFA Dakar', city: 'Dakar', facilitatorId: null },
-          { id: '4', name: 'ASK Handball', city: 'Kaolack', facilitatorId: null },
-          { id: '5', name: 'US Gorée', city: 'Dakar', facilitatorId: null }
-        ];
-        setClubs(defaultClubs);
-        localStorage.setItem('fsh-clubs', JSON.stringify(defaultClubs));
-      }
-
-      if (facilitatorsData) {
-        setFacilitators(JSON.parse(facilitatorsData));
-      } else {
-        // Demo facilitator
-        const demoFacilitator = [{
-          id: '1', name: 'Moussa Diallo', username: 'facilitator', password: 'fac123',
-          email: 'moussa@fsh.sn', phone: '77 123 45 67', assignedClubs: []
-        }];
-        setFacilitators(demoFacilitator);
-        localStorage.setItem('fsh-facilitators', JSON.stringify(demoFacilitator));
-      }
-
-      if (secretariesData) {
-        setClubSecretaries(JSON.parse(secretariesData));
-      } else {
-        // Demo secretary
-        const demoSecretary = [{
-          id: '1', name: 'Fatou Sall', username: 'secretary', password: 'sec123',
-          email: 'fatou@jaraaf.sn', phone: '77 987 65 43', club: 'ASC Jaraaf', facilitatorId: null
-        }];
-        setClubSecretaries(demoSecretary);
-        localStorage.setItem('fsh-secretaries', JSON.stringify(demoSecretary));
-      }
-
-      if (requestsData) {
-        setLicenseRequests(JSON.parse(requestsData));
-      }
-    } catch (error) {
-      console.log('Initializing with default data');
-    }
+  const addNotif = (msg, type='info') => {
+    const n = { id: Date.now().toString(), message: msg, type, timestamp: new Date().toISOString(), read: false };
+    const upd = [n, ...notifications];
+    setNotifications(upd); localStorage.setItem('fsh-notifications', JSON.stringify(upd));
   };
 
-  // Auth Functions
   const handleLogin = (e) => {
     e.preventDefault();
     const { username, password, role } = loginForm;
-
     if (role === 'admin' && username === 'admin' && password === 'admin123') {
-      setCurrentUser({ role: 'admin', name: 'Administrateur FSH', username: 'admin' });
-      setShowLogin(false);
-      addNotification('Connexion réussie', 'success');
+      setCurrentUser({ role:'admin', name:'Administrateur FSH', username:'admin' }); setShowLogin(false);
     } else if (role === 'facilitator') {
-      const facilitator = facilitators.find(f => f.username === username && f.password === password);
-      if (facilitator) {
-        setCurrentUser({ role: 'facilitator', ...facilitator });
-        setShowLogin(false);
-        addNotification('Connexion réussie', 'success');
-      } else {
-        alert('Identifiants incorrects');
-      }
+      const f = facilitators.find(f => f.username === username && f.password === password);
+      if (f) { setCurrentUser({ role:'facilitator', ...f }); setShowLogin(false); } else alert('Identifiants incorrects');
     } else if (role === 'secretary') {
-      const secretary = clubSecretaries.find(s => s.username === username && s.password === password);
-      if (secretary) {
-        setCurrentUser({ role: 'secretary', ...secretary });
-        setShowLogin(false);
-        addNotification('Connexion réussie', 'success');
-      } else {
-        alert('Identifiants incorrects');
-      }
-    } else {
-      alert('Identifiants incorrects');
+      const s = clubSecretaries.find(s => s.username === username && s.password === password);
+      if (s) { setCurrentUser({ role:'secretary', ...s }); setShowLogin(false); } else alert('Identifiants incorrects');
+    } else alert('Identifiants incorrects');
+  };
+
+  const getFilteredData = () => {
+    if (!currentUser) return { licenses:[], clubs:[], requests:[] };
+    if (currentUser.role === 'admin') return { licenses, clubs, requests: licenseRequests };
+    if (currentUser.role === 'facilitator') {
+      const myClubs = clubs.filter(c => c.facilitatorId === currentUser.id);
+      return { licenses: licenses.filter(l => myClubs.some(c => c.name === l.club)), clubs: myClubs, requests: licenseRequests.filter(r => r.facilitatorId === currentUser.id) };
     }
+    if (currentUser.role === 'secretary') {
+      return { licenses: licenses.filter(l => l.club === currentUser.club), clubs: [clubs.find(c => c.name === currentUser.club)].filter(Boolean), requests: licenseRequests.filter(r => r.secretaryId === currentUser.id) };
+    }
+    return { licenses:[], clubs:[], requests:[] };
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setShowLogin(true);
-    setView('dashboard');
+  const fd = getFilteredData();
+  const unread = notifications.filter(n => !n.read).length;
+  const accessibleClubs = currentUser?.role === 'facilitator' ? clubs.filter(c => c.facilitatorId === currentUser.id) : clubs;
+
+  const handleFileUpload = (field, file, dataField) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => setLicForm(prev => ({ ...prev, [field]: file.name, [dataField]: e.target.result }));
+    reader.readAsDataURL(file);
   };
 
-  // Notification system
-  const addNotification = (message, type = 'info') => {
-    const newNotif = {
-      id: Date.now().toString(),
-      message,
-      type,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    const updatedNotifications = [newNotif, ...notifications];
-    setNotifications(updatedNotifications);
-    localStorage.setItem('fsh-notifications', JSON.stringify(updatedNotifications));
-  };
-
-  // Facilitator Management (Admin only)
   const handleCreateFacilitator = (e) => {
     e.preventDefault();
-    const newFacilitator = {
-      id: Date.now().toString(),
-      ...facilitatorForm,
-      assignedClubs: [],
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...facilitators, newFacilitator];
-    setFacilitators(updated);
-    localStorage.setItem('fsh-facilitators', JSON.stringify(updated));
-    setShowModal(false);
-    setFacilitatorForm({ name: '', username: '', password: '', email: '', phone: '' });
-    addNotification(`Facilitateur ${newFacilitator.name} créé avec succès`, 'success');
+    const n = { id: Date.now().toString(), ...facilitatorForm, assignedClubs:[], createdAt: new Date().toISOString() };
+    save('fsh-facilitators', [...facilitators, n], setFacilitators);
+    setShowModal(false); setFacilitatorForm({ name:'', username:'', password:'', email:'', phone:'' });
+    addNotif(`Facilitateur ${n.name} créé`, 'success');
   };
 
-  // Club Secretary Management
   const handleCreateSecretary = (e) => {
     e.preventDefault();
     const club = clubs.find(c => c.name === secretaryForm.club);
-    const newSecretary = {
-      id: Date.now().toString(),
-      ...secretaryForm,
-      facilitatorId: club?.facilitatorId || null,
-      createdAt: new Date().toISOString()
-    };
-    const updated = [...clubSecretaries, newSecretary];
-    setClubSecretaries(updated);
-    localStorage.setItem('fsh-secretaries', JSON.stringify(updated));
-    setShowModal(false);
-    setSecretaryForm({ name: '', username: '', password: '', email: '', phone: '', club: '' });
-    addNotification(`Secrétaire ${newSecretary.name} créé avec succès`, 'success');
+    const fid = club?.facilitatorId || (currentUser.role === 'facilitator' ? currentUser.id : null);
+    const n = { id: Date.now().toString(), ...secretaryForm, facilitatorId: fid, createdAt: new Date().toISOString() };
+    save('fsh-secretaries', [...clubSecretaries, n], setClubSecretaries);
+    setShowModal(false); setSecretaryForm({ name:'', username:'', password:'', email:'', phone:'', club:'' });
+    addNotif(`Secrétaire ${n.name} créé`, 'success');
   };
 
-  // Assign facilitator to club (Admin only)
-  const handleAssignFacilitator = (clubId, facilitatorId) => {
-    const updatedClubs = clubs.map(club => 
-      club.id === clubId ? { ...club, facilitatorId } : club
-    );
-    setClubs(updatedClubs);
-    localStorage.setItem('fsh-clubs', JSON.stringify(updatedClubs));
-
-    const updatedFacilitators = facilitators.map(f => 
-      f.id === facilitatorId 
-        ? { ...f, assignedClubs: [...(f.assignedClubs || []), clubId] }
-        : f
-    );
-    setFacilitators(updatedFacilitators);
-    localStorage.setItem('fsh-facilitators', JSON.stringify(updatedFacilitators));
-
-    // Update secretaries with facilitator
-    const updatedSecretaries = clubSecretaries.map(s => {
-      const club = updatedClubs.find(c => c.name === s.club);
-      return club ? { ...s, facilitatorId: club.facilitatorId } : s;
-    });
-    setClubSecretaries(updatedSecretaries);
-    localStorage.setItem('fsh-secretaries', JSON.stringify(updatedSecretaries));
-
-    addNotification('Facilitateur affecté au club avec succès', 'success');
+  const handleAssignFacilitator = (clubId, fId) => {
+    const upd = clubs.map(c => c.id === clubId ? { ...c, facilitatorId: fId } : c);
+    save('fsh-clubs', upd, setClubs);
+    addNotif('Facilitateur affecté', 'success');
   };
 
-  // License Request (Secretary)
-  const handleSubmitLicenseRequest = (e) => {
+  const handleSubmitLicense = (e) => {
     e.preventDefault();
-    
-    const secretary = currentUser;
-    const club = clubs.find(c => c.name === secretary.club);
-    
-    if (!club?.facilitatorId) {
-      alert('Aucun facilitateur n\'est affecté à votre club. Veuillez contacter l\'administration.');
-      return;
-    }
-
-    const newRequest = {
-      id: Date.now().toString(),
-      ...licenseRequestForm,
-      club: secretary.club,
-      secretaryId: secretary.id,
-      facilitatorId: club.facilitatorId,
-      status: 'pending',
-      submittedAt: new Date().toISOString(),
-      comments: []
-    };
-
-    const updated = [...licenseRequests, newRequest];
-    setLicenseRequests(updated);
-    localStorage.setItem('fsh-requests', JSON.stringify(updated));
-    
+    const club = clubs.find(c => c.name === currentUser.club);
+    if (!club?.facilitatorId) { alert("Aucun facilitateur affecté à votre club."); return; }
+    const req = { id: Date.now().toString(), ...licForm, club: currentUser.club, secretaryId: currentUser.id, facilitatorId: club.facilitatorId, status:'pending', submittedAt: new Date().toISOString(), comments:[] };
+    save('fsh-requests', [...licenseRequests, req], setLicenseRequests);
     setShowModal(false);
-    setLicenseRequestForm({
-      firstName: '', lastName: '', dateOfBirth: '', gender: '', category: '',
-      photoFile: null, idCardFile: null, medicalCertFile: null, birthCertFile: null
-    });
-    
-    addNotification('Demande de licence soumise avec succès', 'success');
+    setLicForm({ firstName:'', lastName:'', dateOfBirth:'', gender:'', category:'', photoFile:null, photoDataUrl:null, idCardFile:null, medicalCertFile:null, medicalCertDataUrl:null, birthCertFile:null });
+    addNotif('Demande soumise avec succès', 'success');
   };
 
-  // Review License Request (Facilitator)
-  const handleReviewRequest = (requestId, action, comment = '') => {
-    const request = licenseRequests.find(r => r.id === requestId);
-    
+  const handleReview = (id, action, comment='') => {
+    const req = licenseRequests.find(r => r.id === id);
     if (action === 'approve') {
-      // Create license
-      const licenseNumber = generateLicenseNumber();
-      const newLicense = {
-        id: Date.now().toString(),
-        licenseNumber,
-        firstName: request.firstName,
-        lastName: request.lastName,
-        dateOfBirth: request.dateOfBirth,
-        gender: request.gender,
-        category: request.category,
-        club: request.club,
-        photoFile: request.photoFile,
-        status: 'active',
-        validityYear: new Date().getFullYear(),
-        issuedDate: new Date().toISOString(),
-        expirationDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
-        assure: true,
-        certifieMedical: true,
-        competitions: true,
-        identiteVerifiee: true
-      };
-
-      const updatedLicenses = [...licenses, newLicense];
-      setLicenses(updatedLicenses);
-      localStorage.setItem('fsh-licenses', JSON.stringify(updatedLicenses));
-      
-      // Update request status
-      const updatedRequests = licenseRequests.map(r => 
-        r.id === requestId 
-          ? { ...r, status: 'approved', reviewedAt: new Date().toISOString(), licenseNumber, reviewComment: comment }
-          : r
-      );
-      setLicenseRequests(updatedRequests);
-      localStorage.setItem('fsh-requests', JSON.stringify(updatedRequests));
-      
-      addNotification(`Licence ${licenseNumber} délivrée avec succès`, 'success');
-    } else if (action === 'reject') {
-      const updatedRequests = licenseRequests.map(r => 
-        r.id === requestId 
-          ? { ...r, status: 'rejected', reviewedAt: new Date().toISOString(), reviewComment: comment }
-          : r
-      );
-      setLicenseRequests(updatedRequests);
-      localStorage.setItem('fsh-requests', JSON.stringify(updatedRequests));
-      
-      addNotification('Demande rejetée', 'info');
+      const num = `${new Date().getFullYear()}${Math.floor(Math.random()*100000).toString().padStart(5,'0')}`;
+      const lic = { id: Date.now().toString(), licenseNumber: num, firstName: req.firstName, lastName: req.lastName, dateOfBirth: req.dateOfBirth, gender: req.gender, category: req.category, club: req.club, photoFile: req.photoFile, photoDataUrl: req.photoDataUrl, status:'active', validityYear: new Date().getFullYear(), issuedDate: new Date().toISOString(), expirationDate: new Date(new Date().setFullYear(new Date().getFullYear()+1)).toISOString(), assure:true, certifieMedical:!!req.medicalCertFile, competitions:true, identiteVerifiee:!!req.idCardFile };
+      save('fsh-licenses', [...licenses, lic], setLicenses);
+      save('fsh-requests', licenseRequests.map(r => r.id===id ? { ...r, status:'approved', reviewedAt: new Date().toISOString(), licenseNumber: num, reviewComment: comment } : r), setLicenseRequests);
+      addNotif(`Licence ${num} délivrée`, 'success');
+    } else {
+      save('fsh-requests', licenseRequests.map(r => r.id===id ? { ...r, status:'rejected', reviewedAt: new Date().toISOString(), reviewComment: comment } : r), setLicenseRequests);
+      addNotif('Demande rejetée', 'info');
     }
-    
     setSelectedRequest(null);
   };
 
-  const generateLicenseNumber = () => {
-    const year = new Date().getFullYear();
-    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
-    return `${year}${random}`;
-  };
-
-  // Filter data based on user role
-  const getFilteredData = () => {
-    if (!currentUser) {
-      return { licenses: [], clubs: [], requests: [] };
-    }
-    
-    if (currentUser.role === 'admin') {
-      return { licenses, clubs, requests: licenseRequests };
-    } else if (currentUser.role === 'facilitator') {
-      const myClubs = clubs.filter(c => c.facilitatorId === currentUser.id);
-      const myRequests = licenseRequests.filter(r => r.facilitatorId === currentUser.id);
-      const myLicenses = licenses.filter(l => myClubs.some(c => c.name === l.club));
-      return { licenses: myLicenses, clubs: myClubs, requests: myRequests };
-    } else if (currentUser.role === 'secretary') {
-      const myLicenses = licenses.filter(l => l.club === currentUser.club);
-      const myRequests = licenseRequests.filter(r => r.secretaryId === currentUser.id);
-      return { licenses: myLicenses, clubs: [clubs.find(c => c.name === currentUser.club)].filter(Boolean), requests: myRequests };
-    }
-    return { licenses: [], clubs: [], requests: [] };
-  };
-
-  const filteredData = getFilteredData();
-
-  // Login Screen
-  if (showLogin) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-green-700 flex items-center justify-center p-4">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-yellow-400 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-red-500 rounded-full blur-3xl"></div>
-        </div>
-        
-        <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden relative z-10">
-          <div className="bg-gradient-to-r from-green-600 via-yellow-500 to-red-600 p-8 text-white text-center">
-            <div className="w-24 h-24 bg-white rounded-full mx-auto mb-4 flex items-center justify-center shadow-xl">
-              <Award className="w-14 h-14 text-green-700" />
-            </div>
-            <h1 className="text-3xl font-bold mb-2">FSH License System</h1>
-            <p className="text-green-50">Fédération Sénégalaise de Handball</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="p-8">
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-gray-700 mb-2">Type d'utilisateur</label>
-              <select
-                value={loginForm.role}
-                onChange={(e) => setLoginForm({...loginForm, role: e.target.value})}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-              >
-                <option value="admin">Administrateur</option>
-                <option value="facilitator">Facilitateur</option>
-                <option value="secretary">Secrétaire de Club</option>
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-bold text-gray-700 mb-2">Nom d'utilisateur</label>
-              <input
-                type="text"
-                value={loginForm.username}
-                onChange={(e) => setLoginForm({...loginForm, username: e.target.value})}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                placeholder="Votre nom d'utilisateur"
-                required
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-gray-700 mb-2">Mot de passe</label>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                placeholder="Votre mot de passe"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 rounded-xl font-bold hover:from-green-700 hover:to-green-800 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
-            >
-              Se connecter
-            </button>
-
-            <div className="mt-6 p-4 bg-green-50 rounded-xl">
-              <p className="text-xs text-green-800 font-semibold mb-2">Comptes de démonstration:</p>
-              <p className="text-xs text-green-700">Admin: admin / admin123</p>
-              <p className="text-xs text-green-700">Facilitateur: facilitator / fac123</p>
-              <p className="text-xs text-green-700">Secrétaire: secretary / sec123</p>
-            </div>
-          </form>
-        </div>
+  // ═══ LOGIN ═══
+  if (showLogin) return (
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-green-700 flex items-center justify-center p-4">
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-yellow-400 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-red-500 rounded-full blur-3xl"></div>
       </div>
-    );
-  }
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden relative z-10">
+        <div className="bg-gradient-to-r from-green-600 via-yellow-500 to-red-600 p-8 text-white text-center">
+          <div className="w-20 h-20 bg-white rounded-full mx-auto mb-3 flex items-center justify-center shadow-xl">
+            <Award className="w-12 h-12 text-green-700" />
+          </div>
+          <h1 className="text-2xl font-bold">FSH License System</h1>
+          <p className="text-white/80 text-sm">Fédération Sénégalaise de Handball</p>
+        </div>
+        <form onSubmit={handleLogin} className="p-7 space-y-4">
+          {[
+            { label: "Type d'utilisateur", field: 'role', type: 'select', options: [['admin','Administrateur'],['facilitator','Facilitateur'],['secretary','Secrétaire de Club']] },
+            { label: "Nom d'utilisateur", field: 'username', type: 'text' },
+            { label: 'Mot de passe', field: 'password', type: 'password' },
+          ].map(f => (
+            <div key={f.field}>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{f.label}</label>
+              {f.type === 'select'
+                ? <select value={loginForm[f.field]} onChange={e => setLoginForm({...loginForm, [f.field]: e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none">
+                    {f.options.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                : <input type={f.type} required value={loginForm[f.field]} onChange={e => setLoginForm({...loginForm, [f.field]: e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none" />
+              }
+            </div>
+          ))}
+          <button type="submit" className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 rounded-xl font-bold hover:from-green-700 hover:to-green-800 transition-all shadow-lg mt-2">Se connecter</button>
+          <div className="p-4 bg-green-50 rounded-xl text-xs text-green-700 space-y-1">
+            <p className="font-bold text-green-800">Comptes de démonstration:</p>
+            <p>Admin: admin / admin123</p>
+            <p>Facilitateur: facilitator / fac123</p>
+            <p>Secrétaire: secretary / sec123</p>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 
-  // Main Application
+  // ═══ MAIN APP ═══
+  const navItems = [
+    { key:'dashboard', icon:Home, label:'Tableau de Bord', roles:['admin','facilitator','secretary'] },
+    { key:'facilitators', icon:UserCheck, label:'Facilitateurs', roles:['admin'] },
+    { key:'clubs', icon:Users, label:'Clubs', roles:['admin'] },
+    { key:'secretaries', icon:UserPlus, label:'Secrétaires', roles:['admin','facilitator'] },
+    { key:'requests', icon:Clipboard, label:'Demandes', roles:['admin','facilitator'], badge: fd.requests.filter(r=>r.status==='pending').length },
+    { key:'licenses', icon:Award, label:'Licences', roles:['admin','facilitator','secretary'] },
+  ].filter(i => i.roles.includes(currentUser.role));
+
   return (
     <div className="min-h-screen bg-gray-50">
+
       {/* Header */}
       <header className="bg-gradient-to-r from-green-700 via-yellow-500 to-red-600 text-white shadow-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center">
-                <Award className="w-8 h-8 text-green-700" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">FSH - Système de Gestion</h1>
-                <p className="text-sm text-white/90">{currentUser.name}</p>
-              </div>
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center"><Award className="w-7 h-7 text-green-700" /></div>
+            <div>
+              <h1 className="text-lg md:text-2xl font-bold leading-tight">FSH – Gestion des Licences</h1>
+              <p className="text-xs text-white/80">{currentUser.name}</p>
             </div>
-            
-            <div className="flex items-center gap-4">
-              <button className="relative p-2 hover:bg-white/10 rounded-lg transition-colors">
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button onClick={() => setShowNotif(!showNotif)} className="relative p-2 hover:bg-white/10 rounded-lg">
                 <Bell className="w-6 h-6" />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute top-0 right-0 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">
-                    {notifications.filter(n => !n.read).length}
-                  </span>
-                )}
+                {unread > 0 && <span className="absolute top-0 right-0 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold">{unread}</span>}
               </button>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                <span className="font-semibold">Déconnexion</span>
-              </button>
+              {showNotif && (
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl z-50 border border-gray-100 overflow-hidden">
+                  <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border-b">
+                    <span className="font-bold text-gray-900 text-sm">Notifications</span>
+                    <button onClick={() => { const u = notifications.map(n=>({...n,read:true})); setNotifications(u); localStorage.setItem('fsh-notifications',JSON.stringify(u)); }} className="text-xs text-green-600 font-semibold">Tout lire</button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notifications.slice(0,8).map(n => (
+                      <div key={n.id} className={`px-4 py-3 border-b border-gray-50 ${!n.read?'bg-green-50':''}`}>
+                        <p className="text-sm text-gray-800">{n.message}</p>
+                        <p className="text-xs text-gray-400">{new Date(n.timestamp).toLocaleString('fr-FR')}</p>
+                      </div>
+                    ))}
+                    {notifications.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">Aucune notification</p>}
+                  </div>
+                </div>
+              )}
             </div>
+            <button onClick={() => { setCurrentUser(null); setShowLogin(true); setView('dashboard'); }} className="flex items-center gap-1 bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg font-semibold text-sm">
+              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Déconnexion</span>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-[76px] z-40">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-1">
-            <button
-              onClick={() => setView('dashboard')}
-              className={`flex items-center gap-2 px-6 py-4 font-semibold border-b-4 transition-all ${
-                view === 'dashboard' 
-                  ? 'border-green-600 text-green-600 bg-green-50' 
-                  : 'border-transparent text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <Home className="w-5 h-5" />
-              Tableau de Bord
-            </button>
-
-            {currentUser.role === 'admin' && (
-              <>
-                <button
-                  onClick={() => setView('facilitators')}
-                  className={`flex items-center gap-2 px-6 py-4 font-semibold border-b-4 transition-all ${
-                    view === 'facilitators' 
-                      ? 'border-green-600 text-green-600 bg-green-50' 
-                      : 'border-transparent text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <UserCheck className="w-5 h-5" />
-                  Facilitateurs
-                </button>
-                <button
-                  onClick={() => setView('clubs')}
-                  className={`flex items-center gap-2 px-6 py-4 font-semibold border-b-4 transition-all ${
-                    view === 'clubs' 
-                      ? 'border-green-600 text-green-600 bg-green-50' 
-                      : 'border-transparent text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <Users className="w-5 h-5" />
-                  Clubs
-                </button>
-              </>
-            )}
-
-            {(currentUser.role === 'facilitator' || currentUser.role === 'admin') && (
-              <button
-                onClick={() => setView('requests')}
-                className={`flex items-center gap-2 px-6 py-4 font-semibold border-b-4 transition-all ${
-                  view === 'requests' 
-                    ? 'border-green-600 text-green-600 bg-green-50' 
-                    : 'border-transparent text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Clipboard className="w-5 h-5" />
-                Demandes
-                {filteredData.requests.filter(r => r.status === 'pending').length > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
-                    {filteredData.requests.filter(r => r.status === 'pending').length}
-                  </span>
-                )}
+      {/* Nav */}
+      <nav className="bg-white border-b shadow-sm sticky top-[68px] z-40 overflow-x-auto">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <div className="flex gap-0 min-w-max">
+            {navItems.map(item => (
+              <button key={item.key} onClick={() => setView(item.key)}
+                className={`flex items-center gap-2 px-4 md:px-6 py-4 font-semibold border-b-4 transition-all text-sm whitespace-nowrap ${view===item.key?'border-green-600 text-green-600 bg-green-50':'border-transparent text-gray-600 hover:bg-gray-50'}`}>
+                <item.icon className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="hidden sm:inline">{item.label}</span>
+                {item.badge > 0 && <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">{item.badge}</span>}
               </button>
-            )}
-
-            <button
-              onClick={() => setView('licenses')}
-              className={`flex items-center gap-2 px-6 py-4 font-semibold border-b-4 transition-all ${
-                view === 'licenses' 
-                  ? 'border-green-600 text-green-600 bg-green-50' 
-                  : 'border-transparent text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <Award className="w-5 h-5" />
-              Licences
-            </button>
+            ))}
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Dashboard View */}
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
+
+        {/* ════ DASHBOARD ════ */}
         {view === 'dashboard' && (
           <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-gray-900">Tableau de Bord</h2>
-            
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                    <Award className="w-6 h-6" />
-                  </div>
-                  <span className="text-sm bg-white/20 px-3 py-1 rounded-full font-semibold">Total</span>
-                </div>
-                <h3 className="text-4xl font-bold mb-2">{filteredData.licenses.length}</h3>
-                <p className="text-green-100 font-medium">Licences Actives</p>
-              </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Tableau de Bord</h2>
 
-              {currentUser.role === 'facilitator' && (
-                <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl p-6 text-white shadow-lg">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                      <Clock className="w-6 h-6" />
-                    </div>
-                    <span className="text-sm bg-white/20 px-3 py-1 rounded-full font-semibold">En attente</span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label:'Licences Actives', val: fd.licenses.filter(l=>l.status==='active').length, grad:'from-green-500 to-green-600', icon:Award },
+                { label:'Total Demandes', val: fd.requests.length, grad:'from-blue-500 to-blue-600', icon:FileCheck },
+                { label:'En Attente', val: fd.requests.filter(r=>r.status==='pending').length, grad:'from-yellow-500 to-yellow-600', icon:Clock },
+                { label: currentUser.role==='admin'?'Facilitateurs': currentUser.role==='facilitator'?'Mes Clubs':'Mon Club', val: currentUser.role==='admin'?facilitators.length:fd.clubs.filter(Boolean).length, grad:'from-purple-500 to-purple-600', icon:Users },
+              ].map((c,i) => (
+                <div key={i} className={`bg-gradient-to-br ${c.grad} rounded-2xl p-5 text-white shadow-lg`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center"><c.icon className="w-5 h-5"/></div>
                   </div>
-                  <h3 className="text-4xl font-bold mb-2">
-                    {filteredData.requests.filter(r => r.status === 'pending').length}
-                  </h3>
-                  <p className="text-yellow-100 font-medium">Demandes à Traiter</p>
+                  <h3 className="text-4xl font-black mb-1">{c.val}</h3>
+                  <p className="text-white/80 text-sm font-medium">{c.label}</p>
                 </div>
-              )}
-
-              {currentUser.role === 'secretary' && (
-                <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl p-6 text-white shadow-lg">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                      <FileCheck className="w-6 h-6" />
-                    </div>
-                    <span className="text-sm bg-white/20 px-3 py-1 rounded-full font-semibold">Soumises</span>
-                  </div>
-                  <h3 className="text-4xl font-bold mb-2">{filteredData.requests.length}</h3>
-                  <p className="text-yellow-100 font-medium">Mes Demandes</p>
-                </div>
-              )}
-
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                    <Users className="w-6 h-6" />
-                  </div>
-                  <span className="text-sm bg-white/20 px-3 py-1 rounded-full font-semibold">Clubs</span>
-                </div>
-                <h3 className="text-4xl font-bold mb-2">{filteredData.clubs.filter(c => c).length}</h3>
-                <p className="text-blue-100 font-medium">
-                  {currentUser.role === 'admin' ? 'Total Clubs' : 
-                   currentUser.role === 'facilitator' ? 'Mes Clubs' : 'Mon Club'}
-                </p>
-              </div>
-
-              {currentUser.role === 'admin' && (
-                <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                      <UserCheck className="w-6 h-6" />
-                    </div>
-                    <span className="text-sm bg-white/20 px-3 py-1 rounded-full font-semibold">Actifs</span>
-                  </div>
-                  <h3 className="text-4xl font-bold mb-2">{facilitators.length}</h3>
-                  <p className="text-red-100 font-medium">Facilitateurs</p>
-                </div>
-              )}
+              ))}
             </div>
 
-            {/* Recent Activity */}
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Activités Récentes</h3>
-              <div className="space-y-3">
-                {filteredData.requests.slice(0, 5).map(request => (
-                  <div key={request.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-3 h-3 rounded-full ${
-                        request.status === 'pending' ? 'bg-yellow-500' :
-                        request.status === 'approved' ? 'bg-green-500' : 'bg-red-500'
-                      }`}></div>
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {request.firstName} {request.lastName}
-                        </p>
-                        <p className="text-sm text-gray-600">{request.club}</p>
+            {currentUser.role === 'admin' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="bg-white rounded-2xl shadow-lg p-6 md:col-span-2">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><BarChart2 className="w-5 h-5 text-green-600"/>Licences par Club</h3>
+                  <div className="space-y-3">
+                    {clubs.map(club => {
+                      const cnt = licenses.filter(l=>l.club===club.name).length;
+                      const mx = Math.max(...clubs.map(c=>licenses.filter(l=>l.club===c.name).length),1);
+                      return (
+                        <div key={club.id}>
+                          <div className="flex justify-between text-sm mb-1"><span className="text-gray-700 font-medium">{club.name}</span><span className="font-bold text-green-700">{cnt}</span></div>
+                          <div className="h-3 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full" style={{width:`${Math.round(cnt/mx*100)}%`}}></div></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><Activity className="w-5 h-5 text-green-600"/>Statuts Demandes</h3>
+                  <div className="space-y-3">
+                    {[
+                      { label:'Approuvées', cnt: licenseRequests.filter(r=>r.status==='approved').length, col:'bg-green-500', txt:'text-green-700' },
+                      { label:'En attente', cnt: licenseRequests.filter(r=>r.status==='pending').length, col:'bg-yellow-500', txt:'text-yellow-700' },
+                      { label:'Rejetées', cnt: licenseRequests.filter(r=>r.status==='rejected').length, col:'bg-red-500', txt:'text-red-700' },
+                    ].map((s,i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                        <div className="flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${s.col}`}></div><span className="text-sm text-gray-700">{s.label}</span></div>
+                        <span className={`text-lg font-black ${s.txt}`}>{s.cnt}</span>
                       </div>
+                    ))}
+                    <div className="flex justify-between pt-2 border-t"><span className="text-sm text-gray-500 font-semibold">Total</span><span className="text-xl font-black text-gray-900">{licenseRequests.length}</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Activités Récentes</h3>
+              <div className="space-y-3">
+                {fd.requests.slice(0,6).map(r => (
+                  <div key={r.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${r.status==='pending'?'bg-yellow-500':r.status==='approved'?'bg-green-500':'bg-red-500'}`}></div>
+                      <div><p className="font-semibold text-gray-900 text-sm">{r.firstName} {r.lastName}</p><p className="text-xs text-gray-500">{r.club}</p></div>
                     </div>
-                    <div className="text-right">
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                        request.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                        request.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {request.status === 'pending' ? 'En attente' :
-                         request.status === 'approved' ? 'Approuvée' : 'Rejetée'}
-                      </span>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {new Date(request.submittedAt).toLocaleDateString('fr-FR')}
-                      </p>
-                    </div>
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${r.status==='pending'?'bg-yellow-100 text-yellow-700':r.status==='approved'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>
+                      {r.status==='pending'?'En attente':r.status==='approved'?'Approuvée':'Rejetée'}
+                    </span>
                   </div>
                 ))}
-                {filteredData.requests.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">Aucune activité récente</p>
-                )}
+                {fd.requests.length===0 && <p className="text-center text-gray-400 py-8">Aucune activité récente</p>}
               </div>
             </div>
           </div>
         )}
 
-        {/* Facilitators View (Admin only) */}
+        {/* ════ FACILITATEURS ════ */}
         {view === 'facilitators' && currentUser.role === 'admin' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-bold text-gray-900">Gestion des Facilitateurs</h2>
-              <button
-                onClick={() => { setModalType('createFacilitator'); setShowModal(true); }}
-                className="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                Nouveau Facilitateur
+              <h2 className="text-2xl font-bold text-gray-900">Facilitateurs</h2>
+              <button onClick={() => { setModalType('createFacilitator'); setShowModal(true); }} className="bg-green-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-700 flex items-center gap-2 shadow-lg">
+                <span className="text-lg">+</span> Nouveau Facilitateur
               </button>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {facilitators.map(facilitator => (
-                <div key={facilitator.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
-                      {facilitator.name.split(' ').map(n => n[0]).join('')}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {facilitators.map(f => (
+                <div key={f.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-green-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">{f.name.split(' ').map(n=>n[0]).join('')}</div>
+                    <div className="flex gap-2">
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">Actif</span>
+                      <button onClick={() => { if(window.confirm('Supprimer ?')){ save('fsh-facilitators',facilitators.filter(x=>x.id!==f.id),setFacilitators); addNotif('Facilitateur supprimé','info'); }}} className="w-8 h-8 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center text-red-500"><Trash2 className="w-4 h-4"/></button>
                     </div>
-                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
-                      Actif
-                    </span>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{facilitator.name}</h3>
-                  <div className="space-y-2 mb-4">
-                    <p className="text-sm text-gray-600 flex items-center gap-2">
-                      <span className="font-semibold">Email:</span> {facilitator.email}
-                    </p>
-                    <p className="text-sm text-gray-600 flex items-center gap-2">
-                      <span className="font-semibold">Tél:</span> {facilitator.phone}
-                    </p>
-                    <p className="text-sm text-gray-600 flex items-center gap-2">
-                      <span className="font-semibold">Username:</span> {facilitator.username}
-                    </p>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">{f.name}</h3>
+                  <div className="space-y-1 text-sm text-gray-600 mb-3">
+                    <p><span className="font-semibold">Email:</span> {f.email}</p>
+                    <p><span className="font-semibold">Tél:</span> {f.phone}</p>
+                    <p><span className="font-semibold">Login:</span> {f.username}</p>
                   </div>
-                  <div className="pt-4 border-t border-gray-200">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Clubs Assignés:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {clubs.filter(c => c.facilitatorId === facilitator.id).map(club => (
-                        <span key={club.id} className="bg-green-50 text-green-700 px-3 py-1 rounded-lg text-xs font-semibold">
-                          {club.name}
-                        </span>
-                      ))}
-                      {clubs.filter(c => c.facilitatorId === facilitator.id).length === 0 && (
-                        <span className="text-gray-400 text-xs">Aucun club assigné</span>
-                      )}
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-xs font-semibold text-gray-500 mb-2">Clubs assignés:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {clubs.filter(c=>c.facilitatorId===f.id).map(c=><span key={c.id} className="bg-green-50 text-green-700 px-2 py-0.5 rounded-lg text-xs font-semibold">{c.name}</span>)}
+                      {clubs.filter(c=>c.facilitatorId===f.id).length===0 && <span className="text-gray-400 text-xs">Aucun club</span>}
                     </div>
                   </div>
                 </div>
               ))}
+              {facilitators.length===0 && <div className="col-span-3 text-center py-16 bg-white rounded-2xl shadow"><UserCheck className="w-14 h-14 text-gray-300 mx-auto mb-3"/><p className="text-gray-500">Aucun facilitateur</p></div>}
             </div>
           </div>
         )}
 
-        {/* Clubs View (Admin only) */}
+        {/* ════ CLUBS ════ */}
         {view === 'clubs' && currentUser.role === 'admin' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-bold text-gray-900">Gestion des Clubs</h2>
-              <button
-                onClick={() => { setModalType('createSecretary'); setShowModal(true); }}
-                className="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg"
-              >
-                <Plus className="w-5 h-5" />
-                Nouveau Secrétaire
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6">
+            <h2 className="text-2xl font-bold text-gray-900">Clubs</h2>
+            <div className="space-y-4">
               {clubs.map(club => (
-                <div key={club.id} className="bg-white rounded-2xl shadow-lg p-6">
+                <div key={club.id} className="bg-white rounded-2xl shadow-lg p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-yellow-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
-                        {club.name[0]}
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-bold text-gray-900">{club.name}</h3>
-                        <p className="text-gray-600">{club.city}</p>
-                      </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-yellow-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">{club.name[0]}</div>
+                      <div><h3 className="text-xl font-bold text-gray-900">{club.name}</h3><p className="text-gray-500 text-sm">{club.city}</p></div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600 mb-1">Licences actives</p>
-                      <p className="text-3xl font-bold text-green-600">
-                        {licenses.filter(l => l.club === club.name).length}
-                      </p>
-                    </div>
+                    <div className="text-right"><p className="text-xs text-gray-500">Licences</p><p className="text-2xl font-black text-green-600">{licenses.filter(l=>l.club===club.name).length}</p></div>
                   </div>
-
-                  <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                  <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Facilitateur Assigné
-                      </label>
-                      <select
-                        value={club.facilitatorId || ''}
-                        onChange={(e) => handleAssignFacilitator(club.id, e.target.value)}
-                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                      >
-                        <option value="">-- Sélectionner un facilitateur --</option>
-                        {facilitators.map(f => (
-                          <option key={f.id} value={f.id}>{f.name}</option>
-                        ))}
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Facilitateur assigné</label>
+                      <select value={club.facilitatorId||''} onChange={e=>handleAssignFacilitator(club.id,e.target.value)} className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none text-sm">
+                        <option value="">-- Aucun --</option>
+                        {facilitators.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-700 mb-2">Secrétaires</p>
+                      <p className="text-sm font-semibold text-gray-700 mb-1">Secrétaires Généraux</p>
                       <div className="space-y-1">
-                        {clubSecretaries.filter(s => s.club === club.name).map(secretary => (
-                          <div key={secretary.id} className="bg-gray-50 px-3 py-2 rounded-lg text-sm">
-                            <p className="font-semibold text-gray-900">{secretary.name}</p>
-                            <p className="text-gray-600 text-xs">{secretary.email}</p>
-                          </div>
+                        {clubSecretaries.filter(s=>s.club===club.name).map(s=>(
+                          <div key={s.id} className="bg-gray-50 px-3 py-2 rounded-lg text-xs"><p className="font-semibold text-gray-800">{s.name}</p><p className="text-gray-500">{s.email}</p></div>
                         ))}
-                        {clubSecretaries.filter(s => s.club === club.name).length === 0 && (
-                          <p className="text-gray-400 text-xs">Aucun secrétaire</p>
-                        )}
+                        {clubSecretaries.filter(s=>s.club===club.name).length===0 && <p className="text-gray-400 text-xs">Aucun secrétaire</p>}
                       </div>
                     </div>
                   </div>
@@ -769,634 +542,355 @@ const HandballLicenseSystem = () => {
           </div>
         )}
 
-        {/* Requests View (Facilitator) */}
-        {view === 'requests' && (currentUser.role === 'facilitator' || currentUser.role === 'admin') && (
+        {/* ════ SECRETAIRES ════ */}
+        {view === 'secretaries' && (currentUser.role==='admin' || currentUser.role==='facilitator') && (
           <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-gray-900">Demandes de Licences</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">Secrétaires Généraux</h2>
+              <button onClick={() => { setModalType('createSecretary'); setShowModal(true); }} className="bg-green-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-700 flex items-center gap-2 shadow-lg">
+                <span className="text-lg">+</span> Nouveau Secrétaire
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {(currentUser.role==='facilitator'
+                ? clubSecretaries.filter(s=>clubs.filter(c=>c.facilitatorId===currentUser.id).some(c=>c.name===s.club))
+                : clubSecretaries
+              ).map(s => (
+                <div key={s.id} className="bg-white rounded-2xl shadow-lg p-5 hover:shadow-xl transition-all">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center text-white text-lg font-bold">{s.name.split(' ').map(n=>n[0]).join('')}</div>
+                    <button onClick={() => { if(window.confirm('Supprimer ?')){ save('fsh-secretaries',clubSecretaries.filter(x=>x.id!==s.id),setClubSecretaries); addNotif('Secrétaire supprimé','info'); }}} className="w-8 h-8 bg-red-50 hover:bg-red-100 rounded-lg flex items-center justify-center text-red-500"><Trash2 className="w-4 h-4"/></button>
+                  </div>
+                  <h3 className="font-bold text-gray-900 mb-1">{s.name}</h3>
+                  <span className="inline-block bg-green-50 text-green-700 text-xs font-semibold px-3 py-1 rounded-full mb-3">{s.club}</span>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p><span className="font-semibold">Email:</span> {s.email}</p>
+                    <p><span className="font-semibold">Tél:</span> {s.phone}</p>
+                    <p><span className="font-semibold">Login:</span> {s.username}</p>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100">Demandes: <span className="font-bold text-gray-700">{licenseRequests.filter(r=>r.secretaryId===s.id).length}</span></p>
+                </div>
+              ))}
+              {(currentUser.role==='facilitator'?clubSecretaries.filter(s=>clubs.filter(c=>c.facilitatorId===currentUser.id).some(c=>c.name===s.club)):clubSecretaries).length===0 && (
+                <div className="col-span-3 text-center py-16 bg-white rounded-2xl shadow"><UserPlus className="w-14 h-14 text-gray-300 mx-auto mb-3"/><p className="text-gray-500">Aucun secrétaire enregistré</p></div>
+              )}
+            </div>
+          </div>
+        )}
 
-            {/* Filter tabs */}
-            <div className="flex gap-2">
-              {['all', 'pending', 'approved', 'rejected'].map(status => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-                    filterStatus === status
-                      ? 'bg-green-600 text-white shadow-lg'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {status === 'all' ? 'Toutes' : 
-                   status === 'pending' ? 'En attente' :
-                   status === 'approved' ? 'Approuvées' : 'Rejetées'}
-                  {status !== 'all' && (
-                    <span className="ml-2 bg-white/20 px-2 py-1 rounded-full text-xs">
-                      {filteredData.requests.filter(r => r.status === status).length}
-                    </span>
-                  )}
+        {/* ════ DEMANDES ════ */}
+        {view === 'requests' && (currentUser.role==='facilitator'||currentUser.role==='admin') && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Demandes de Licences</h2>
+            <div className="flex gap-2 flex-wrap">
+              {['all','pending','approved','rejected'].map(s=>(
+                <button key={s} onClick={()=>setFilterStatus(s)} className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all ${filterStatus===s?'bg-green-600 text-white shadow':'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {s==='all'?'Toutes':s==='pending'?'En attente':s==='approved'?'Approuvées':'Rejetées'}
+                  {s!=='all'&&<span className="ml-1.5 text-xs opacity-80">({fd.requests.filter(r=>r.status===s).length})</span>}
                 </button>
               ))}
             </div>
-
-            <div className="grid grid-cols-1 gap-6">
-              {filteredData.requests
-                .filter(r => filterStatus === 'all' || r.status === filterStatus)
-                .map(request => (
-                <div key={request.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-blue-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
-                        {request.firstName[0]}{request.lastName[0]}
-                      </div>
+            <div className="space-y-4">
+              {fd.requests.filter(r=>filterStatus==='all'||r.status===filterStatus).map(req=>(
+                <div key={req.id} className="bg-white rounded-2xl shadow-lg p-5 hover:shadow-xl transition-all">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      {req.photoDataUrl
+                        ? <img src={req.photoDataUrl} alt="" className="w-14 h-14 rounded-xl object-cover border-2 border-green-200"/>
+                        : <div className="w-14 h-14 bg-gradient-to-br from-green-400 to-blue-500 rounded-xl flex items-center justify-center text-white text-xl font-bold">{req.firstName[0]}{req.lastName[0]}</div>
+                      }
                       <div>
-                        <h3 className="text-xl font-bold text-gray-900">
-                          {request.firstName} {request.lastName}
-                        </h3>
-                        <p className="text-gray-600">{request.club}</p>
-                        <p className="text-sm text-gray-500">{request.category}</p>
+                        <h3 className="font-bold text-gray-900">{req.firstName} {req.lastName}</h3>
+                        <p className="text-sm text-gray-500">{req.club} · {req.category}</p>
+                        <p className="text-xs text-gray-400">{new Date(req.submittedAt).toLocaleDateString('fr-FR')}</p>
                       </div>
                     </div>
-                    <span className={`px-4 py-2 rounded-xl font-semibold text-sm ${
-                      request.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      request.status === 'approved' ? 'bg-green-100 text-green-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {request.status === 'pending' ? 'En attente' :
-                       request.status === 'approved' ? 'Approuvée' : 'Rejetée'}
+                    <span className={`px-3 py-1.5 rounded-xl font-semibold text-xs ${req.status==='pending'?'bg-yellow-100 text-yellow-700':req.status==='approved'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>
+                      {req.status==='pending'?'⏳ En attente':req.status==='approved'?'✅ Approuvée':'❌ Rejetée'}
                     </span>
                   </div>
-
-                  <div className="grid md:grid-cols-2 gap-4 mb-4">
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-sm text-gray-600 mb-1">Date de naissance</p>
-                      <p className="font-semibold text-gray-900">
-                        {new Date(request.dateOfBirth).toLocaleDateString('fr-FR')}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-sm text-gray-600 mb-1">Genre</p>
-                      <p className="font-semibold text-gray-900">
-                        {request.gender === 'M' ? 'Masculin' : 'Féminin'}
-                      </p>
-                    </div>
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    {[{l:'Photo',f:req.photoFile},{l:'CNI',f:req.idCardFile},{l:'Médical',f:req.medicalCertFile},{l:'Naissance',f:req.birthCertFile}].map((d,i)=>(
+                      <div key={i} className={`p-2 rounded-xl text-center text-xs font-semibold ${d.f?'bg-green-50 text-green-700':'bg-red-50 text-red-500'}`}>
+                        <div className="text-base mb-0.5">{d.f?'✅':'❌'}</div>{d.l}
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="mb-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Documents fournis:</p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {[
-                        { label: 'Photo', file: request.photoFile },
-                        { label: 'CNI', file: request.idCardFile },
-                        { label: 'Certificat Médical', file: request.medicalCertFile },
-                        { label: 'Acte de Naissance', file: request.birthCertFile }
-                      ].map((doc, idx) => (
-                        <div key={idx} className={`p-3 rounded-lg text-center ${
-                          doc.file ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                        }`}>
-                          <div className={`w-8 h-8 mx-auto mb-1 rounded-full flex items-center justify-center ${
-                            doc.file ? 'bg-green-200' : 'bg-red-200'
-                          }`}>
-                            {doc.file ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                          </div>
-                          <p className="text-xs font-semibold">{doc.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="text-sm text-gray-600 mb-4">
-                    <p>Soumis le: {new Date(request.submittedAt).toLocaleString('fr-FR')}</p>
-                    {request.reviewedAt && (
-                      <p>Traité le: {new Date(request.reviewedAt).toLocaleString('fr-FR')}</p>
-                    )}
-                  </div>
-
-                  {request.status === 'pending' && (
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setSelectedRequest(request)}
-                        className="flex-1 bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-                      >
-                        <CheckCircle className="w-5 h-5" />
-                        Examiner
+                  {req.status==='pending' && (
+                    <button onClick={()=>setSelectedRequest(req)} className="w-full bg-green-600 text-white py-2.5 rounded-xl font-semibold hover:bg-green-700 flex items-center justify-center gap-2 text-sm">
+                      <Eye className="w-4 h-4"/> Examiner
+                    </button>
+                  )}
+                  {req.status==='approved' && req.licenseNumber && (
+                    <div className="bg-green-50 rounded-xl p-3 flex items-center justify-between mt-2">
+                      <div><p className="text-xs text-green-600 font-semibold">Licence délivrée</p><p className="font-black text-green-900">{req.licenseNumber}</p></div>
+                      <button onClick={()=>{ const l=licenses.find(x=>x.licenseNumber===req.licenseNumber); if(l) setSelectedLicense(l); }} className="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-green-700 flex items-center gap-1">
+                        <Eye className="w-3.5 h-3.5"/> Voir
                       </button>
                     </div>
                   )}
-
-                  {request.status !== 'pending' && request.reviewComment && (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-sm font-semibold text-gray-700 mb-1">Commentaire:</p>
-                      <p className="text-sm text-gray-600">{request.reviewComment}</p>
-                    </div>
-                  )}
-
-                  {request.status === 'approved' && request.licenseNumber && (
-                    <div className="bg-green-50 rounded-xl p-4 mt-4">
-                      <p className="text-sm font-semibold text-green-700 mb-1">Licence délivrée:</p>
-                      <p className="text-lg font-bold text-green-900">{request.licenseNumber}</p>
-                    </div>
-                  )}
+                  {req.reviewComment && <div className="bg-gray-50 rounded-xl p-3 mt-2 text-sm"><span className="font-semibold text-gray-700">Commentaire: </span><span className="text-gray-600">{req.reviewComment}</span></div>}
                 </div>
               ))}
-              
-              {filteredData.requests.filter(r => filterStatus === 'all' || r.status === filterStatus).length === 0 && (
-                <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
-                  <Clipboard className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg">Aucune demande trouvée</p>
-                </div>
+              {fd.requests.filter(r=>filterStatus==='all'||r.status===filterStatus).length===0 && (
+                <div className="text-center py-14 bg-white rounded-2xl shadow"><Clipboard className="w-14 h-14 text-gray-300 mx-auto mb-3"/><p className="text-gray-500">Aucune demande</p></div>
               )}
             </div>
           </div>
         )}
 
-        {/* Licenses View */}
+        {/* ════ LICENCES ════ */}
         {view === 'licenses' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-bold text-gray-900">Licences</h2>
-              {currentUser.role === 'secretary' && (
-                <button
-                  onClick={() => { setModalType('licenseRequest'); setShowModal(true); }}
-                  className="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg"
-                >
-                  <Plus className="w-5 h-5" />
-                  Nouvelle Demande
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-2xl font-bold text-gray-900">Licences</h2>
+              {currentUser.role==='secretary' && (
+                <button onClick={()=>{ setModalType('licenseRequest'); setShowModal(true); }} className="bg-green-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-green-700 flex items-center gap-2 shadow-lg">
+                  <span className="text-lg">+</span> Nouvelle Demande
                 </button>
               )}
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredData.licenses.map(license => (
-                <div key={license.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all transform hover:scale-105 cursor-pointer" onClick={() => setSelectedLicense(license)}>
-                  {/* License Card - Senegal colors header */}
-                  <div className="h-32 bg-gradient-to-r from-green-600 via-yellow-500 to-red-600 relative p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
-                        <Award className="w-7 h-7 text-green-700" />
-                      </div>
-                      <div className="text-white">
-                        <p className="text-xs font-semibold opacity-90">FÉDÉRATION SÉNÉGALAISE</p>
-                        <p className="text-lg font-bold">DE HANDBALL</p>
-                      </div>
-                    </div>
-                    <div className="absolute top-4 right-4">
-                      <span className="bg-white text-green-700 px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                        {license.status === 'active' ? 'ACTIF' : 'EXPIRÉ'}
-                      </span>
-                    </div>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5"/>
+              <input type="text" placeholder="Rechercher..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {fd.licenses.filter(l=>!searchTerm||`${l.firstName} ${l.lastName} ${l.club} ${l.licenseNumber}`.toLowerCase().includes(searchTerm.toLowerCase())).map(lic=>(
+                <div key={lic.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all cursor-pointer hover:-translate-y-1 transform" onClick={()=>setSelectedLicense(lic)}>
+                  <div className="h-2 bg-gradient-to-r from-green-600 via-yellow-500 to-red-600"></div>
+                  <div className="bg-green-700 px-4 py-3 flex items-center gap-2">
+                    <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center font-black text-green-700 text-xs">FSH</div>
+                    <div className="text-white flex-1"><p className="text-xs opacity-75">FÉDÉRATION SÉNÉGALAISE DE HANDBALL</p><p className="text-sm font-bold">LICENCE JOUEUR</p></div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${lic.status==='active'?'bg-white text-green-700':'bg-red-100 text-red-700'}`}>{lic.status==='active'?'ACTIF':'EXPIRÉ'}</span>
                   </div>
-
-                  <div className="p-6 -mt-12 relative">
-                    {/* Player photo placeholder */}
-                    <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl shadow-xl mx-auto mb-4 flex items-center justify-center border-4 border-white text-white text-3xl font-bold">
-                      {license.firstName[0]}{license.lastName[0]}
-                    </div>
-
-                    <div className="bg-green-700 text-white rounded-xl p-4 mb-4">
-                      <h3 className="text-xl font-bold mb-2 text-center">
-                        {license.firstName} {license.lastName}
-                      </h3>
-                      <div className="space-y-1 text-sm">
-                        <p className="flex justify-between border-b border-green-600 pb-1">
-                          <span className="opacity-90">N° Licence:</span>
-                          <span className="font-bold">{license.licenseNumber}</span>
-                        </p>
-                        <p className="flex justify-between border-b border-green-600 pb-1">
-                          <span className="opacity-90">Date de Naissance:</span>
-                          <span className="font-bold">
-                            {new Date(license.dateOfBirth).toLocaleDateString('fr-FR')}
-                          </span>
-                        </p>
-                        <p className="flex justify-between border-b border-green-600 pb-1">
-                          <span className="opacity-90">Club:</span>
-                          <span className="font-bold">{license.club}</span>
-                        </p>
-                        <p className="flex justify-between">
-                          <span className="opacity-90">Catégorie:</span>
-                          <span className="font-bold">{license.category}</span>
-                        </p>
+                  <div className="p-4">
+                    <div className="flex gap-3 mb-3">
+                      {lic.photoDataUrl
+                        ? <img src={lic.photoDataUrl} alt="" className="w-20 h-24 object-cover rounded-xl border-2 border-green-200 flex-shrink-0"/>
+                        : <div className="w-20 h-24 bg-gradient-to-br from-green-600 to-green-800 rounded-xl flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">{lic.firstName[0]}{lic.lastName[0]}</div>
+                      }
+                      <div className="flex-1 bg-green-700 rounded-xl p-3 text-white min-w-0">
+                        <p className="font-bold text-sm border-b border-green-600 pb-1.5 mb-1.5 truncate">{lic.firstName} {lic.lastName}</p>
+                        <div className="space-y-1 text-xs">
+                          <p><span className="opacity-70">N°: </span><span className="font-bold">{lic.licenseNumber}</span></p>
+                          <p><span className="opacity-70">Club: </span><span className="font-bold">{lic.club}</span></p>
+                          <p><span className="opacity-70">Cat.: </span><span className="font-bold">{lic.category}</span></p>
+                        </div>
                       </div>
                     </div>
-
-                    {/* QR Code placeholder */}
-                    <div className="bg-white border-4 border-gray-200 rounded-xl p-4 mb-4">
-                      <div className="w-32 h-32 mx-auto bg-gray-100 rounded-lg flex items-center justify-center">
-                        <QrCode className="w-20 h-20 text-gray-400" />
+                    <div className="flex gap-3 mb-3">
+                      <div className="border-2 border-green-600 rounded-xl p-1 bg-white flex-shrink-0">
+                        <QRCodeCanvas value={`FSH-${lic.licenseNumber}`} size={60}/>
                       </div>
-                      <p className="text-center text-xs text-gray-600 mt-2 font-semibold">
-                        ID: {license.licenseNumber}
-                      </p>
-                    </div>
-
-                    {/* Validity and status */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="bg-gray-50 rounded-xl p-3 text-center">
-                        <p className="text-xs text-gray-600 mb-1">Validité</p>
-                        <p className="font-bold text-green-700">{license.validityYear}</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-xl p-3 text-center">
-                        <p className="text-xs text-gray-600 mb-1">Statut</p>
-                        <p className="font-bold text-green-700">
-                          {license.status === 'active' ? 'ACTIF' : 'EXPIRÉ'}
-                        </p>
+                      <div className="flex-1 space-y-1.5">
+                        <div className="bg-gray-50 rounded-lg p-2 flex justify-between items-center"><span className="text-xs text-gray-500">Validité</span><span className="text-sm font-black text-green-700">{lic.validityYear}</span></div>
+                        <div className="bg-gray-50 rounded-lg p-2 flex justify-between items-center"><span className="text-xs text-gray-500">Statut</span><span className={`text-sm font-black ${lic.status==='active'?'text-green-700':'text-red-600'}`}>{lic.status==='active'?'ACTIF':'EXPIRÉ'}</span></div>
                       </div>
                     </div>
-
-                    {/* Features icons */}
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { icon: Shield, label: 'Assuré', active: license.assure },
-                        { icon: FileCheck, label: 'Certifié Médical', active: license.certifieMedical },
-                        { icon: Award, label: 'Compétitions', active: license.competitions },
-                        { icon: CheckCircle, label: 'Identité Vérifiée', active: license.identiteVerifiee }
-                      ].map((feature, idx) => (
-                        <div key={idx} className={`p-2 rounded-lg text-center ${
-                          feature.active ? 'bg-green-50' : 'bg-gray-50'
-                        }`}>
-                          <feature.icon className={`w-6 h-6 mx-auto mb-1 ${
-                            feature.active ? 'text-green-600' : 'text-gray-400'
-                          }`} />
-                          <p className={`text-xs font-semibold ${
-                            feature.active ? 'text-green-700' : 'text-gray-500'
-                          }`}>
-                            {feature.label.split(' ')[0]}
-                          </p>
+                    <div className="grid grid-cols-4 gap-1 border-t pt-2">
+                      {[{ico:'🛡️',lbl:'Assuré',a:lic.assure},{ico:'🏥',lbl:'Médical',a:lic.certifieMedical},{ico:'🏆',lbl:'Compét.',a:lic.competitions},{ico:'🪪',lbl:'Identité',a:lic.identiteVerifiee}].map((f,i)=>(
+                        <div key={i} className={`p-1.5 rounded-lg text-center ${f.a?'bg-green-50':'bg-gray-50'}`}>
+                          <div className="text-base">{f.ico}</div>
+                          <div className={`text-xs font-semibold ${f.a?'text-green-700':'text-gray-400'}`}>{f.lbl}</div>
                         </div>
                       ))}
                     </div>
                   </div>
-
-                  {/* Bottom decoration */}
-                  <div className="h-4 bg-gradient-to-r from-green-600 via-yellow-500 to-red-600"></div>
+                  <div className="h-2 bg-gradient-to-r from-green-600 via-yellow-500 to-red-600"></div>
                 </div>
               ))}
             </div>
-
-            {filteredData.licenses.length === 0 && (
-              <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
-                <Award className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">Aucune licence trouvée</p>
+            {fd.licenses.length===0 && (
+              <div className="text-center py-14 bg-white rounded-2xl shadow">
+                <Award className="w-14 h-14 text-gray-300 mx-auto mb-3"/>
+                <p className="text-gray-500">Aucune licence</p>
+                {currentUser.role==='secretary' && <p className="text-gray-400 text-sm mt-1">Soumettez une demande pour commencer</p>}
               </div>
             )}
           </div>
         )}
+
       </main>
 
-      {/* Modals */}
-      {showModal && modalType === 'createFacilitator' && (
+      {/* ══════════════ MODALS ══════════════ */}
+
+      {/* Modal Facilitateur */}
+      {showModal && modalType==='createFacilitator' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Nouveau Facilitateur</h2>
-                <button onClick={() => setShowModal(false)} className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-green-700 text-white p-5 rounded-t-2xl flex items-center justify-between">
+              <h2 className="text-lg font-bold">Nouveau Facilitateur</h2>
+              <button onClick={()=>setShowModal(false)} className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center"><X className="w-5 h-5"/></button>
             </div>
-            <form onSubmit={handleCreateFacilitator} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nom Complet</label>
-                <input
-                  type="text"
-                  required
-                  value={facilitatorForm.name}
-                  onChange={(e) => setFacilitatorForm({...facilitatorForm, name: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                />
+            <form onSubmit={handleCreateFacilitator} className="p-5 space-y-4">
+              {[{l:'Nom Complet',f:'name',t:'text'},{l:'Email',f:'email',t:'email'},{l:'Téléphone',f:'phone',t:'tel'}].map(({l,f,t})=>(
+                <div key={f}><label className="block text-sm font-semibold text-gray-700 mb-1">{l}</label>
+                <input type={t} required value={facilitatorForm[f]} onChange={e=>setFacilitatorForm({...facilitatorForm,[f]:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/></div>
+              ))}
+              <div className="grid grid-cols-2 gap-3">
+                {[{l:"Nom d'utilisateur",f:'username'},{l:'Mot de passe',f:'password'}].map(({l,f})=>(
+                  <div key={f}><label className="block text-sm font-semibold text-gray-700 mb-1">{l}</label>
+                  <input type="text" required value={facilitatorForm[f]} onChange={e=>setFacilitatorForm({...facilitatorForm,[f]:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/></div>
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Nom d'utilisateur</label>
-                  <input
-                    type="text"
-                    required
-                    value={facilitatorForm.username}
-                    onChange={(e) => setFacilitatorForm({...facilitatorForm, username: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Mot de passe</label>
-                  <input
-                    type="text"
-                    required
-                    value={facilitatorForm.password}
-                    onChange={(e) => setFacilitatorForm({...facilitatorForm, password: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={facilitatorForm.email}
-                  onChange={(e) => setFacilitatorForm({...facilitatorForm, email: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Téléphone</label>
-                <input
-                  type="tel"
-                  required
-                  value={facilitatorForm.phone}
-                  onChange={(e) => setFacilitatorForm({...facilitatorForm, phone: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-                  Annuler
-                </button>
-                <button type="submit" className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transition-all shadow-lg">
-                  Créer
-                </button>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={()=>setShowModal(false)} className="flex-1 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50">Annuler</button>
+                <button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 shadow-lg">Créer</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {showModal && modalType === 'createSecretary' && (
+      {/* Modal Secrétaire */}
+      {showModal && modalType==='createSecretary' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Nouveau Secrétaire de Club</h2>
-                <button onClick={() => setShowModal(false)} className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-green-700 text-white p-5 rounded-t-2xl flex items-center justify-between">
+              <h2 className="text-lg font-bold">Nouveau Secrétaire Général</h2>
+              <button onClick={()=>setShowModal(false)} className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center"><X className="w-5 h-5"/></button>
             </div>
-            <form onSubmit={handleCreateSecretary} className="p-6 space-y-4">
+            <form onSubmit={handleCreateSecretary} className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nom Complet</label>
-                <input
-                  type="text"
-                  required
-                  value={secretaryForm.name}
-                  onChange={(e) => setSecretaryForm({...secretaryForm, name: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Club</label>
-                <select
-                  required
-                  value={secretaryForm.club}
-                  onChange={(e) => setSecretaryForm({...secretaryForm, club: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                >
-                  <option value="">Sélectionner un club</option>
-                  {clubs.map(club => (
-                    <option key={club.id} value={club.name}>{club.name}</option>
-                  ))}
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Club</label>
+                <select required value={secretaryForm.club} onChange={e=>setSecretaryForm({...secretaryForm,club:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none">
+                  <option value="">-- Sélectionner un club --</option>
+                  {accessibleClubs.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Nom d'utilisateur</label>
-                  <input
-                    type="text"
-                    required
-                    value={secretaryForm.username}
-                    onChange={(e) => setSecretaryForm({...secretaryForm, username: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Mot de passe</label>
-                  <input
-                    type="text"
-                    required
-                    value={secretaryForm.password}
-                    onChange={(e) => setSecretaryForm({...secretaryForm, password: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
+              {[{l:'Nom Complet',f:'name',t:'text'},{l:'Email',f:'email',t:'email'},{l:'Téléphone',f:'phone',t:'tel'}].map(({l,f,t})=>(
+                <div key={f}><label className="block text-sm font-semibold text-gray-700 mb-1">{l}</label>
+                <input type={t} required value={secretaryForm[f]} onChange={e=>setSecretaryForm({...secretaryForm,[f]:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/></div>
+              ))}
+              <div className="grid grid-cols-2 gap-3">
+                {[{l:"Nom d'utilisateur",f:'username'},{l:'Mot de passe',f:'password'}].map(({l,f})=>(
+                  <div key={f}><label className="block text-sm font-semibold text-gray-700 mb-1">{l}</label>
+                  <input type="text" required value={secretaryForm[f]} onChange={e=>setSecretaryForm({...secretaryForm,[f]:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/></div>
+                ))}
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={secretaryForm.email}
-                  onChange={(e) => setSecretaryForm({...secretaryForm, email: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Téléphone</label>
-                <input
-                  type="tel"
-                  required
-                  value={secretaryForm.phone}
-                  onChange={(e) => setSecretaryForm({...secretaryForm, phone: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                />
-              </div>
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-                  Annuler
-                </button>
-                <button type="submit" className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transition-all shadow-lg">
-                  Créer
-                </button>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={()=>setShowModal(false)} className="flex-1 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50">Annuler</button>
+                <button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 shadow-lg">Créer</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {showModal && modalType === 'licenseRequest' && (
+      {/* Modal Demande Licence */}
+      {showModal && modalType==='licenseRequest' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Nouvelle Demande de Licence</h2>
-                <button onClick={() => setShowModal(false)} className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-green-700 text-white p-5 rounded-t-2xl flex items-center justify-between">
+              <h2 className="text-lg font-bold">Nouvelle Demande de Licence</h2>
+              <button onClick={()=>setShowModal(false)} className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center"><X className="w-5 h-5"/></button>
             </div>
-            <form onSubmit={handleSubmitLicenseRequest} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Prénom</label>
-                  <input
-                    type="text"
-                    required
-                    value={licenseRequestForm.firstName}
-                    onChange={(e) => setLicenseRequestForm({...licenseRequestForm, firstName: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Nom</label>
-                  <input
-                    type="text"
-                    required
-                    value={licenseRequestForm.lastName}
-                    onChange={(e) => setLicenseRequestForm({...licenseRequestForm, lastName: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
+            <form onSubmit={handleSubmitLicense} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {[{l:'Prénom',f:'firstName'},{l:'Nom',f:'lastName'}].map(({l,f})=>(
+                  <div key={f}><label className="block text-sm font-semibold text-gray-700 mb-1">{l}</label>
+                  <input type="text" required value={licForm[f]} onChange={e=>setLicForm({...licForm,[f]:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/></div>
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Date de Naissance</label>
-                  <input
-                    type="date"
-                    required
-                    value={licenseRequestForm.dateOfBirth}
-                    onChange={(e) => setLicenseRequestForm({...licenseRequestForm, dateOfBirth: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Genre</label>
-                  <select
-                    required
-                    value={licenseRequestForm.gender}
-                    onChange={(e) => setLicenseRequestForm({...licenseRequestForm, gender: e.target.value})}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  >
-                    <option value="">Sélectionner</option>
-                    <option value="M">Masculin</option>
-                    <option value="F">Féminin</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-sm font-semibold text-gray-700 mb-1">Date de Naissance</label>
+                <input type="date" required value={licForm.dateOfBirth} onChange={e=>setLicForm({...licForm,dateOfBirth:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"/></div>
+                <div><label className="block text-sm font-semibold text-gray-700 mb-1">Genre</label>
+                <select required value={licForm.gender} onChange={e=>setLicForm({...licForm,gender:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none">
+                  <option value="">Sélectionner</option><option value="M">Masculin</option><option value="F">Féminin</option>
+                </select></div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie</label>
-                <select
-                  required
-                  value={licenseRequestForm.category}
-                  onChange={(e) => setLicenseRequestForm({...licenseRequestForm, category: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                >
-                  <option value="">Sélectionner</option>
-                  <option value="U12">U12 - Moins de 12 ans</option>
-                  <option value="U14">U14 - Moins de 14 ans</option>
-                  <option value="U16">U16 - Moins de 16 ans</option>
-                  <option value="U18">U18 - Moins de 18 ans</option>
-                  <option value="SENIOR M">SENIOR M - Hommes</option>
-                  <option value="SENIOR F">SENIOR F - Femmes</option>
-                  <option value="VÉTÉRAN">VÉTÉRAN</option>
-                </select>
-              </div>
-              
-              <div className="border-t pt-4">
-                <p className="text-sm font-semibold text-gray-700 mb-3">Documents requis (simulations):</p>
-                <div className="space-y-3">
-                  {[
-                    { label: 'Photo d\'identité', field: 'photoFile' },
-                    { label: 'Copie CNI', field: 'idCardFile' },
-                    { label: 'Certificat médical', field: 'medicalCertFile' },
-                    { label: 'Acte de naissance', field: 'birthCertFile' }
-                  ].map((doc, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                      <span className="text-sm font-medium text-gray-700">{doc.label}</span>
-                      <label className="cursor-pointer bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={licenseRequestForm[doc.field]}
-                          onChange={(e) => setLicenseRequestForm({...licenseRequestForm, [doc.field]: e.target.checked})}
-                          className="hidden"
-                        />
-                        {licenseRequestForm[doc.field] ? '✓ Fourni' : 'Marquer comme fourni'}
-                      </label>
+              <div><label className="block text-sm font-semibold text-gray-700 mb-1">Catégorie</label>
+              <select required value={licForm.category} onChange={e=>setLicForm({...licForm,category:e.target.value})} className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none">
+                <option value="">Sélectionner</option>
+                {['U12','U14','U16','U18','SENIOR M','SENIOR F','VÉTÉRAN'].map(c=><option key={c} value={c}>{c}</option>)}
+              </select></div>
+
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-sm font-bold text-gray-700">📎 Documents requis</p>
+
+                {/* Photo upload réel */}
+                <div className="border-2 border-dashed border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">📷 Photo d'identité <span className="text-red-500">*</span></label>
+                  <input type="file" accept="image/*" required onChange={e=>handleFileUpload('photoFile',e.target.files[0],'photoDataUrl')} className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-600 file:text-white file:font-semibold hover:file:bg-green-700 cursor-pointer"/>
+                  {licForm.photoDataUrl && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <img src={licForm.photoDataUrl} alt="preview" className="w-14 h-14 object-cover rounded-lg border-2 border-green-200"/>
+                      <span className="text-xs text-green-600 font-semibold">✓ {licForm.photoFile}</span>
                     </div>
-                  ))}
+                  )}
                 </div>
+
+                {/* Certificat médical upload réel */}
+                <div className="border-2 border-dashed border-gray-200 hover:border-green-400 rounded-xl p-4 transition-colors">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">🏥 Certificat Médical <span className="text-red-500">*</span></label>
+                  <input type="file" accept="image/*,application/pdf" required onChange={e=>handleFileUpload('medicalCertFile',e.target.files[0],'medicalCertDataUrl')} className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-600 file:text-white file:font-semibold hover:file:bg-green-700 cursor-pointer"/>
+                  {licForm.medicalCertFile && <p className="mt-1 text-xs text-green-600 font-semibold">✓ {licForm.medicalCertFile}</p>}
+                </div>
+
+                {/* CNI + Acte naissance case à cocher */}
+                {[{l:'🪪 Copie CNI',f:'idCardFile'},{l:'📄 Acte de Naissance',f:'birthCertFile'}].map(({l,f})=>(
+                  <div key={f} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                    <span className="text-sm font-medium text-gray-700">{l}</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={!!licForm[f]} onChange={e=>setLicForm({...licForm,[f]:e.target.checked?'fourni':null})} className="w-5 h-5 accent-green-600 cursor-pointer"/>
+                      <span className={`text-sm font-semibold ${licForm[f]?'text-green-600':'text-gray-500'}`}>{licForm[f]?'✓ Fourni':'Marquer comme fourni'}</span>
+                    </label>
+                  </div>
+                ))}
               </div>
 
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-                  Annuler
-                </button>
-                <button type="submit" className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transition-all shadow-lg">
-                  Soumettre la Demande
-                </button>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={()=>setShowModal(false)} className="flex-1 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50">Annuler</button>
+                <button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 shadow-lg">Soumettre</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
+      {/* Modal examen demande */}
       {selectedRequest && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Examen de la Demande</h2>
-                <button onClick={() => setSelectedRequest(null)} className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-green-700 text-white p-5 rounded-t-2xl flex items-center justify-between">
+              <h2 className="text-lg font-bold">Examen de la Demande</h2>
+              <button onClick={()=>setSelectedRequest(null)} className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center"><X className="w-5 h-5"/></button>
             </div>
-            <div className="p-6">
-              <div className="mb-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  {selectedRequest.firstName} {selectedRequest.lastName}
-                </h3>
-                <p className="text-gray-600">{selectedRequest.club} - {selectedRequest.category}</p>
+            <div className="p-5">
+              <div className="flex gap-4 mb-5">
+                {selectedRequest.photoDataUrl
+                  ? <img src={selectedRequest.photoDataUrl} alt="" className="w-24 h-28 object-cover rounded-xl border-2 border-green-200 flex-shrink-0"/>
+                  : <div className="w-24 h-28 bg-green-100 rounded-xl flex items-center justify-center text-green-700 text-3xl font-bold flex-shrink-0">{selectedRequest.firstName[0]}{selectedRequest.lastName[0]}</div>
+                }
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{selectedRequest.firstName} {selectedRequest.lastName}</h3>
+                  <p className="text-gray-600 text-sm">{selectedRequest.club}</p>
+                  <p className="text-green-700 font-semibold text-sm">{selectedRequest.category}</p>
+                  <p className="text-gray-500 text-sm">Naissance: {new Date(selectedRequest.dateOfBirth).toLocaleDateString('fr-FR')}</p>
+                </div>
               </div>
-
-              <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                <h4 className="font-semibold text-gray-700 mb-3">Documents fournis:</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Photo', file: selectedRequest.photoFile },
-                    { label: 'CNI', file: selectedRequest.idCardFile },
-                    { label: 'Certificat Médical', file: selectedRequest.medicalCertFile },
-                    { label: 'Acte de Naissance', file: selectedRequest.birthCertFile }
-                  ].map((doc, idx) => (
-                    <div key={idx} className={`p-3 rounded-lg ${
-                      doc.file ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        {doc.file ? <Check className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                        <span className="font-semibold text-sm">{doc.label}</span>
-                      </div>
+              <div className="bg-gray-50 rounded-xl p-4 mb-4">
+                <h4 className="font-bold text-gray-700 mb-3 text-sm">Documents fournis</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{l:"Photo d'identité",f:selectedRequest.photoFile},{l:'CNI',f:selectedRequest.idCardFile},{l:'Cert. Médical',f:selectedRequest.medicalCertFile},{l:'Acte Naissance',f:selectedRequest.birthCertFile}].map((d,i)=>(
+                    <div key={i} className={`p-3 rounded-xl flex items-center gap-2 ${d.f?'bg-green-100 text-green-700':'bg-red-100 text-red-600'}`}>
+                      {d.f?<CheckCircle className="w-4 h-4 flex-shrink-0"/>:<XCircle className="w-4 h-4 flex-shrink-0"/>}
+                      <span className="text-xs font-semibold">{d.l}</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Commentaire (optionnel)</label>
-                <textarea
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none"
-                  rows="3"
-                  placeholder="Ajoutez un commentaire..."
-                  id="reviewComment"
-                ></textarea>
+              <div className="mb-5">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Commentaire (optionnel)</label>
+                <textarea id="reviewComment" className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none text-sm" rows="3" placeholder="Motif ou note..."></textarea>
               </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => {
-                    const comment = document.getElementById('reviewComment').value;
-                    handleReviewRequest(selectedRequest.id, 'reject', comment);
-                  }}
-                  className="flex-1 bg-red-600 text-white py-4 rounded-xl font-semibold hover:bg-red-700 transition-all flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-5 h-5" />
-                  Rejeter
+              <div className="flex gap-3">
+                <button onClick={()=>{ const c=document.getElementById('reviewComment').value; handleReview(selectedRequest.id,'reject',c); }} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700 flex items-center justify-center gap-2 text-sm">
+                  <XCircle className="w-4 h-4"/> Rejeter
                 </button>
-                <button
-                  onClick={() => {
-                    const comment = document.getElementById('reviewComment').value;
-                    handleReviewRequest(selectedRequest.id, 'approve', comment);
-                  }}
-                  className="flex-1 bg-green-600 text-white py-4 rounded-xl font-semibold hover:bg-green-700 transition-all flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  Approuver et Délivrer
+                <button onClick={()=>{ const c=document.getElementById('reviewComment').value; handleReview(selectedRequest.id,'approve',c); }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 flex items-center justify-center gap-2 text-sm">
+                  <CheckCircle className="w-4 h-4"/> Approuver
                 </button>
               </div>
             </div>
@@ -1404,76 +898,65 @@ const HandballLicenseSystem = () => {
         </div>
       )}
 
+      {/* Modal licence détail + PDF */}
       {selectedLicense && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="bg-gradient-to-r from-green-600 via-yellow-500 to-red-600 text-white p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Licence Joueur</h2>
-                <button onClick={() => setSelectedLicense(null)} className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-xs w-full overflow-hidden">
+            <div className="h-2 bg-gradient-to-r from-green-600 via-yellow-500 to-red-600"></div>
+            <div className="bg-green-700 px-4 py-3 flex items-center gap-3">
+              <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center font-black text-green-700 text-sm flex-shrink-0">FSH</div>
+              <div className="text-white flex-1 min-w-0">
+                <p className="text-xs opacity-75 truncate">FÉDÉRATION SÉNÉGALAISE DE HANDBALL</p>
+                <p className="text-base font-black tracking-widest">LICENCE JOUEUR</p>
               </div>
+              <button onClick={()=>setSelectedLicense(null)} className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0"><X className="w-4 h-4 text-white"/></button>
             </div>
-            
-            <div className="p-6">
-              <div className="text-center mb-6">
-                <div className="w-32 h-32 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl mx-auto mb-4 flex items-center justify-center text-white text-5xl font-bold shadow-xl">
-                  {selectedLicense.firstName[0]}{selectedLicense.lastName[0]}
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                  {selectedLicense.firstName} {selectedLicense.lastName}
-                </h3>
-                <p className="text-gray-600">{selectedLicense.club}</p>
-              </div>
-
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2 mb-6">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">N° Licence:</span>
-                  <span className="font-bold text-gray-900">{selectedLicense.licenseNumber}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Catégorie:</span>
-                  <span className="font-semibold text-gray-900">{selectedLicense.category}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Validité:</span>
-                  <span className="font-semibold text-green-600">{selectedLicense.validityYear}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Statut:</span>
-                  <span className={`font-semibold ${
-                    selectedLicense.status === 'active' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {selectedLicense.status === 'active' ? 'ACTIF' : 'EXPIRÉ'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 mb-6">
-                <div className="flex items-center justify-center mb-3">
-                  <div className="w-40 h-40 bg-white rounded-xl flex items-center justify-center shadow-inner">
-                    <QrCode className="w-32 h-32 text-green-700" />
+            <div className="p-4 bg-gray-50">
+              <div className="flex gap-3 mb-3">
+                {selectedLicense.photoDataUrl
+                  ? <img src={selectedLicense.photoDataUrl} alt="" className="w-20 h-24 object-cover rounded-xl border-2 border-green-700 shadow flex-shrink-0"/>
+                  : <div className="w-20 h-24 bg-gradient-to-br from-green-600 to-green-800 rounded-xl flex items-center justify-center text-white text-2xl font-black shadow flex-shrink-0">{selectedLicense.firstName[0]}{selectedLicense.lastName[0]}</div>
+                }
+                <div className="flex-1 bg-green-700 rounded-xl p-2.5 text-white min-w-0">
+                  <p className="font-black text-sm border-b border-green-600 pb-1.5 mb-1.5 truncate">{selectedLicense.firstName} {selectedLicense.lastName}</p>
+                  <div className="space-y-0.5 text-xs">
+                    <p><span className="opacity-70">N°: </span><span className="font-bold">{selectedLicense.licenseNumber}</span></p>
+                    <p><span className="opacity-70">Né: </span><span className="font-bold">{new Date(selectedLicense.dateOfBirth).toLocaleDateString('fr-FR')}</span></p>
+                    <p><span className="opacity-70">Club: </span><span className="font-bold">{selectedLicense.club}</span></p>
+                    <p><span className="opacity-70">Cat.: </span><span className="font-bold">{selectedLicense.category}</span></p>
                   </div>
                 </div>
-                <p className="text-center text-lg font-bold text-green-700">
-                  Scanner pour vérifier
-                </p>
-                <p className="text-center text-sm text-green-600 mt-1">
-                  {selectedLicense.status === 'active' ? '✓ VALIDE' : '✗ NON VALIDE'}
-                </p>
               </div>
-
-              <button
-                onClick={() => setSelectedLicense(null)}
-                className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 rounded-xl font-bold hover:from-green-700 hover:to-green-800 transition-all"
-              >
-                Fermer
-              </button>
+              <div className="flex gap-3 mb-3">
+                <div className="border-2 border-green-600 rounded-xl p-1.5 bg-white flex-shrink-0">
+                  <QRCodeCanvas value={`FSH-${selectedLicense.licenseNumber}-${selectedLicense.club}-${selectedLicense.validityYear}`} size={86}/>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="bg-white rounded-xl p-2.5 flex justify-between"><span className="text-xs text-gray-500">Validité</span><span className="font-black text-green-700">{selectedLicense.validityYear}</span></div>
+                  <div className="bg-white rounded-xl p-2.5 flex justify-between"><span className="text-xs text-gray-500">Statut</span><span className={`font-black ${selectedLicense.status==='active'?'text-green-700':'text-red-600'}`}>{selectedLicense.status==='active'?'ACTIF':'EXPIRÉ'}</span></div>
+                  <p className="text-center text-xs text-green-600 font-semibold">ID: {selectedLicense.licenseNumber}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 mb-4">
+                {[{i:'🛡️',l:'Assuré',a:selectedLicense.assure},{i:'🏥',l:'Médical',a:selectedLicense.certifieMedical},{i:'🏆',l:'Compét.',a:selectedLicense.competitions},{i:'🪪',l:'Identité',a:selectedLicense.identiteVerifiee}].map((f,idx)=>(
+                  <div key={idx} className={`p-2 rounded-xl text-center ${f.a?'bg-green-100':'bg-gray-100'}`}>
+                    <div className="text-lg">{f.i}</div>
+                    <p className={`text-xs font-bold leading-tight mt-0.5 ${f.a?'text-green-700':'text-gray-400'}`}>{f.l}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={()=>setSelectedLicense(null)} className="flex-1 py-2.5 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 text-sm">Fermer</button>
+                <button onClick={()=>generateLicensePDF(selectedLicense)} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 shadow-lg flex items-center justify-center gap-2 text-sm">
+                  <Download className="w-4 h-4"/> PDF
+                </button>
+              </div>
             </div>
+            <div className="h-2 bg-gradient-to-r from-green-600 via-yellow-500 to-red-600"></div>
           </div>
         </div>
       )}
+
     </div>
   );
 };
